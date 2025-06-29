@@ -96,121 +96,64 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Local authentication strategy
-  passport.use(new LocalStrategy(
-    { usernameField: 'email' },
-    async (email: string, password: string, done) => {
-      try {
-        const user = await storage.getUserByEmail(email);
-        if (!user) {
-          return done(null, false, { message: 'Invalid email or password' });
-        }
-        
-        const isValidPassword = await storage.validatePassword(user.id, password);
-        if (!isValidPassword) {
-          return done(null, false, { message: 'Invalid email or password' });
-        }
-        
-        const sessionUser = {
-          claims: {
-            sub: user.id,
-            email: user.email,
-            first_name: user.firstName,
-            last_name: user.lastName,
-            profile_image_url: user.profileImageUrl,
-          },
-          authProvider: 'local'
-        };
-        
-        return done(null, sessionUser);
-      } catch (error) {
-        return done(error);
-      }
-    }
-  ));
+  let authConfig: any = null;
 
-  // Replit OAuth strategy (skip for localhost development)
+  // Replit OAuth strategy
   try {
-    if (process.env.NODE_ENV === 'production') {
-      const config = await getOidcConfig();
+    authConfig = await getOidcConfig();
 
-      const verify: VerifyFunction = async (
-        tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
-        verified: passport.AuthenticateCallback
-      ) => {
-        const user = {};
-        updateUserSession(user, tokens);
-        await upsertUser(tokens.claims());
-        verified(null, user);
-      };
+    const verify: VerifyFunction = async (
+      tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
+      verified: passport.AuthenticateCallback
+    ) => {
+      const user = {};
+      updateUserSession(user, tokens);
+      await upsertUser(tokens.claims());
+      verified(null, user);
+    };
 
-      for (const domain of process.env.REPLIT_DOMAINS!.split(",")) {
-        const strategy = new Strategy(
-          {
-            name: `replitauth:${domain}`,
-            config,
-            scope: "openid email profile offline_access",
-            callbackURL: `https://${domain}/api/callback`,
-          },
-          verify,
-        );
-        passport.use(strategy);
-      }
+    for (const domain of process.env.REPLIT_DOMAINS!.split(",")) {
+      const strategy = new Strategy(
+        {
+          name: `replitauth:${domain}`,
+          config: authConfig,
+          scope: "openid email profile offline_access",
+          callbackURL: `https://${domain}/api/callback`,
+        },
+        verify,
+      );
+      passport.use(strategy);
     }
   } catch (error) {
-    console.log('Replit OAuth not configured for development mode');
+    console.log('Replit OAuth configuration error:', error);
   }
 
-  passport.serializeUser((user: Express.User, cb) => {
-    cb(null, user);
-  });
-  
-  passport.deserializeUser(async (user: Express.User, cb) => {
-    try {
-      // For development, we'll just return the user as is
-      // In production, you might want to fetch fresh user data
-      cb(null, user);
-    } catch (error) {
-      cb(error, null);
-    }
-  });
+  passport.serializeUser((user: Express.User, cb) => cb(null, user));
+  passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
-    if (process.env.NODE_ENV === 'production') {
-      passport.authenticate(`replitauth:${req.hostname}`, {
-        prompt: "login consent",
-        scope: ["openid", "email", "profile", "offline_access"],
-      })(req, res, next);
-    } else {
-      // In development, redirect to auth page for local login
-      res.redirect('/#/auth');
-    }
+    passport.authenticate(`replitauth:${req.hostname}`, {
+      prompt: "login consent",
+      scope: ["openid", "email", "profile", "offline_access"],
+    })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    if (process.env.NODE_ENV === 'production') {
-      passport.authenticate(`replitauth:${req.hostname}`, {
-        successReturnToOrRedirect: "/",
-        failureRedirect: "/api/login",
-      })(req, res, next);
-    } else {
-      res.redirect('/');
-    }
+    passport.authenticate(`replitauth:${req.hostname}`, {
+      successReturnToOrRedirect: "/",
+      failureRedirect: "/api/login",
+    })(req, res, next);
   });
 
-  app.get("/api/logout", async (req, res) => {
+  app.get("/api/logout", (req, res) => {
     req.logout(() => {
-      if (process.env.NODE_ENV === 'production') {
-        getOidcConfig().then(config => {
-          res.redirect(
-            client.buildEndSessionUrl(config, {
-              client_id: process.env.REPL_ID!,
-              post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-            }).href
-          );
-        }).catch(() => {
-          res.redirect('/');
-        });
+      if (authConfig) {
+        res.redirect(
+          client.buildEndSessionUrl(authConfig, {
+            client_id: process.env.REPL_ID!,
+            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+          }).href
+        );
       } else {
         res.redirect('/');
       }

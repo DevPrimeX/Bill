@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Check, Edit, Trash2, ChevronDown } from "lucide-react";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { Search, Check, Edit, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BillForm } from "./bill-form";
 import { formatCurrency, formatDate, getBillStatusInfo, getCategoryIcon } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
-import type { Bill } from "@shared/schema";
+import type { Bill, Category } from "@shared/schema";
 
 interface BillListProps {
   bills: Bill[];
@@ -21,13 +21,18 @@ interface BillListProps {
 
 export function BillList({ bills, isLoading }: BillListProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Fetch user categories instead of using hardcoded ones
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
 
   const markAsPaidMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: 'paid' | 'unpaid' }) => {
@@ -72,9 +77,9 @@ export function BillList({ bills, isLoading }: BillListProps) {
   const filteredBills = bills.filter((bill) => {
     const matchesSearch = bill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (bill.company && bill.company.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = !selectedCategory || selectedCategory === 'all' || bill.category === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || bill.category === selectedCategory;
     const billStatusInfo = getBillStatusInfo(bill);
-    const matchesStatus = !selectedStatus || selectedStatus === 'all' || 
+    const matchesStatus = selectedStatus === 'all' || 
                          (selectedStatus === 'paid' && bill.status === 'paid') ||
                          (selectedStatus === 'unpaid' && bill.status === 'unpaid') ||
                          (selectedStatus === 'overdue' && billStatusInfo.status === 'overdue');
@@ -138,12 +143,11 @@ export function BillList({ bills, isLoading }: BillListProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="utilities">Utilities</SelectItem>
-                <SelectItem value="rent">Rent</SelectItem>
-                <SelectItem value="credit_cards">Credit Cards</SelectItem>
-                <SelectItem value="insurance">Insurance</SelectItem>
-                <SelectItem value="subscriptions">Subscriptions</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.name}>
+                    {category.icon} {category.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             
@@ -161,143 +165,67 @@ export function BillList({ bills, isLoading }: BillListProps) {
           </div>
         </div>
       </CardContent>
-
+      
       <div className="overflow-x-auto">
-        {/* Desktop Table View */}
-        <div className="hidden lg:block">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Bill Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Due Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Category
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredBills.map((bill) => {
-                const statusInfo = getBillStatusInfo(bill);
-                return (
-                  <tr key={bill.id} className="hover:bg-gray-50 transition-colors duration-150">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className={`p-2 rounded-lg mr-3 ${statusInfo.iconClassName === 'text-primary' ? 'bg-blue-100' : statusInfo.iconClassName === 'text-warning' ? 'bg-orange-100' : statusInfo.iconClassName === 'text-error' ? 'bg-red-100' : 'bg-green-100'}`}>
-                          <span className="text-sm">{getCategoryIcon(bill.category)}</span>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{bill.name}</div>
-                          {bill.company && (
-                            <div className="text-sm text-gray-500">{bill.company}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      {formatCurrency(bill.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(bill.dueDate)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant="secondary" className="capitalize">
-                        {bill.category.replace('_', ' ')}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge className={statusInfo.className}>
-                        {statusInfo.label}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => markAsPaidMutation.mutate({ 
-                            id: bill.id, 
-                            status: bill.status === 'paid' ? 'unpaid' : 'paid' 
-                          })}
-                          disabled={markAsPaidMutation.isPending}
-                          className={bill.status === 'paid' ? 'text-gray-400' : 'text-success hover:text-green-700'}
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditClick(bill)}
-                          className="text-primary hover:text-blue-700"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteBillMutation.mutate(bill.id)}
-                          disabled={deleteBillMutation.isPending}
-                          className="text-error hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Card View */}
-        <div className="lg:hidden p-4 space-y-4">
-          {filteredBills.map((bill) => {
-            const statusInfo = getBillStatusInfo(bill);
-            return (
-              <Card key={bill.id} className="border border-gray-200">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <div className={`p-2 rounded-lg ${statusInfo.iconClassName === 'text-primary' ? 'bg-blue-100' : statusInfo.iconClassName === 'text-warning' ? 'bg-orange-100' : statusInfo.iconClassName === 'text-error' ? 'bg-red-100' : 'bg-green-100'}`}>
-                        <span className="text-sm">{getCategoryIcon(bill.category)}</span>
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Bill Details
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Amount
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Due Date
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Category
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredBills.map((bill) => {
+              const statusInfo = getBillStatusInfo(bill);
+              return (
+                <tr key={bill.id} className="hover:bg-gray-50 transition-colors duration-150">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className={`p-2 rounded-lg mr-3 ${statusInfo.iconClassName === 'text-primary' ? 'bg-blue-100' : statusInfo.iconClassName === 'text-warning' ? 'bg-orange-100' : statusInfo.iconClassName === 'text-error' ? 'bg-red-100' : 'bg-green-100'}`}>
+                        <span className="text-sm">{getCategoryIcon(bill.category || 'other')}</span>
                       </div>
                       <div>
-                        <h3 className="font-medium text-gray-900">{bill.name}</h3>
+                        <div className="text-sm font-medium text-gray-900">{bill.name}</div>
                         {bill.company && (
-                          <p className="text-sm text-gray-500">{bill.company}</p>
+                          <div className="text-sm text-gray-500">{bill.company}</div>
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900">{formatCurrency(bill.amount)}</p>
-                      <p className="text-sm text-gray-500">{formatDate(bill.dueDate)}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="secondary" className="capitalize">
-                        {bill.category.replace('_', ' ')}
-                      </Badge>
-                      <Badge className={statusInfo.className}>
-                        {statusInfo.label}
-                      </Badge>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                    {formatCurrency(bill.amount)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {formatDate(bill.dueDate)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <Badge variant="secondary" className="capitalize">
+                      {bill.category?.replace('_', ' ') || 'Other'}
+                    </Badge>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <Badge className={statusInfo.className}>
+                      {statusInfo.label}
+                    </Badge>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end space-x-2">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -323,34 +251,28 @@ export function BillList({ bills, isLoading }: BillListProps) {
                         size="sm"
                         onClick={() => deleteBillMutation.mutate(bill.id)}
                         disabled={deleteBillMutation.isPending}
-                        className="text-error hover:text-red-700"
+                        className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {filteredBills.length === 0 && !isLoading && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No bills found matching your criteria.</p>
-          </div>
-        )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {/* Edit Dialog */}
+      {filteredBills.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No bills found matching your criteria.</p>
+        </div>
+      )}
+
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          {editingBill && (
-            <BillForm 
-              bill={editingBill} 
-              onSuccess={handleEditSuccess}
-            />
-          )}
+        <DialogContent className="sm:max-w-[600px]">
+          <BillForm bill={editingBill || undefined} onSuccess={handleEditSuccess} />
         </DialogContent>
       </Dialog>
     </Card>
