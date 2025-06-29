@@ -9,9 +9,9 @@ export default function Landing() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
 
-  // Show login form for non-authenticated users
+  // Direct to Replit Auth for Gmail login
   const handleLogin = () => {
-    window.location.href = "/auth";
+    window.location.href = "/api/login";
   };
 
   if (isLoading) {

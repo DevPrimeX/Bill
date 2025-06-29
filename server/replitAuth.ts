@@ -9,19 +9,19 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
-// Set default values for development environment
-if (!process.env.REPLIT_DOMAINS) {
-  process.env.REPLIT_DOMAINS = "localhost:5000,127.0.0.1:5000";
-}
-if (!process.env.REPL_ID) {
-  process.env.REPL_ID = "billtracker-dev";
-}
+// Check if we're in a proper Replit environment
+const isReplitEnvironment = process.env.REPLIT_DOMAINS && process.env.REPL_ID;
+
 if (!process.env.SESSION_SECRET) {
-  process.env.SESSION_SECRET = "dev-session-secret-key-change-in-production";
+  // Set a default session secret for development
+  process.env.SESSION_SECRET = "dev-session-secret-change-in-production";
 }
 
 const getOidcConfig = memoize(
   async () => {
+    if (!isReplitEnvironment) {
+      throw new Error("Replit Auth not available in development environment");
+    }
     return await client.discovery(
       new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
       process.env.REPL_ID!
@@ -96,6 +96,47 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Setup local authentication strategy first
+  passport.use(new LocalStrategy(
+    { usernameField: 'email' },
+    async (email: string, password: string, done) => {
+      try {
+        const user = await storage.getUserByEmail(email);
+        if (!user) {
+          return done(null, false, { message: 'User not found' });
+        }
+        
+        const isValid = await storage.validatePassword(user.id, password);
+        if (!isValid) {
+          return done(null, false, { message: 'Invalid password' });
+        }
+        
+        // Create user object compatible with session
+        const userSession = {
+          claims: {
+            sub: user.id,
+            email: user.email,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            profile_image_url: user.profileImageUrl
+          }
+        };
+        
+        return done(null, userSession);
+      } catch (error) {
+        return done(error);
+      }
+    }
+  ));
+
+  // Setup Replit Auth since environment variables are available
+  if (!isReplitEnvironment) {
+    console.log("Replit Auth not available - using local authentication only");
+    return;
+  }
+  
+  console.log("Setting up Replit Auth with domain:", process.env.REPLIT_DOMAINS);
+
   let authConfig: any = null;
 
   // Replit OAuth strategy
@@ -132,14 +173,18 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    // Use the first domain from REPLIT_DOMAINS for authentication
+    const domain = process.env.REPLIT_DOMAINS!.split(",")[0];
+    passport.authenticate(`replitauth:${domain}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    // Use the first domain from REPLIT_DOMAINS for authentication
+    const domain = process.env.REPLIT_DOMAINS!.split(",")[0];
+    passport.authenticate(`replitauth:${domain}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
     })(req, res, next);
