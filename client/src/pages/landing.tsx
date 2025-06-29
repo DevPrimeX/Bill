@@ -9,21 +9,10 @@ export default function Landing() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
 
-  // Redirect to home if not authenticated
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      // Needs to be a toast notification because the user is redirected to the login page.
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500); // Wait for 0.5 second before redirecting
-      return;
-    }
-  }, [isAuthenticated, isLoading, toast]);
+  // Show login form for non-authenticated users
+  const handleLogin = () => {
+    window.location.href = "/auth";
+  };
 
   if (isLoading) {
     return (
@@ -45,7 +34,7 @@ export default function Landing() {
               </div>
               <h1 className="text-xl font-semibold text-gray-900">BillTracker</h1>
             </div>
-            <Button onClick={() => window.location.href = "/api/login"}>
+            <Button onClick={handleLogin}>
               Sign In
             </Button>
           </div>
@@ -65,7 +54,7 @@ export default function Landing() {
           <Button 
             size="lg" 
             className="px-8 py-3 text-lg"
-            onClick={() => window.location.href = "/api/login"}
+            onClick={handleLogin}
           >
             Get Started Free
           </Button>
@@ -131,7 +120,7 @@ export default function Landing() {
           <Button 
             size="lg" 
             className="px-8 py-3"
-            onClick={() => window.location.href = "/api/login"}
+            onClick={handleLogin}
           >
             Sign In to Continue
           </Button>

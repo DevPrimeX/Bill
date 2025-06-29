@@ -82,9 +82,6 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
 
-    // Create default categories for new user
-    await this.createDefaultCategories(userId);
-    
     return user;
   }
 
@@ -94,23 +91,7 @@ export class DatabaseStorage implements IStorage {
     return await bcrypt.compare(password, user.password);
   }
 
-  private async createDefaultCategories(userId: string): Promise<void> {
-    const defaultCategories = [
-      { name: "Utilities", icon: "⚡", color: "#f59e0b", isDefault: true },
-      { name: "Rent", icon: "🏠", color: "#10b981", isDefault: true },
-      { name: "Credit Cards", icon: "💳", color: "#ef4444", isDefault: true },
-      { name: "Insurance", icon: "🛡️", color: "#3b82f6", isDefault: true },
-      { name: "Subscriptions", icon: "📱", color: "#8b5cf6", isDefault: true },
-      { name: "Other", icon: "📄", color: "#6b7280", isDefault: true },
-    ];
 
-    for (const category of defaultCategories) {
-      await db.insert(categories).values({
-        ...category,
-        userId,
-      });
-    }
-  }
 
   // Category operations
   async getUserCategories(userId: string): Promise<Category[]> {

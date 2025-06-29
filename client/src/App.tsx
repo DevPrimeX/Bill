@@ -6,19 +6,23 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
 import Landing from "@/pages/landing";
+import Auth from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
+      <Route path="/auth" component={Auth} />
+      {isAuthenticated ? (
+        <Route path="/" component={Dashboard} />
       ) : (
-        <>
-          <Route path="/" component={Dashboard} />
-        </>
+        <Route path="/" component={Landing} />
       )}
       <Route component={NotFound} />
     </Switch>
