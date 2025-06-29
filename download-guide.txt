@@ -1,0 +1,52 @@
+BILLTRACKER APP - DOWNLOAD GUIDE
+
+Option 1: Download Archive
+- File: billtracker-app.tar.gz (403KB)
+- Location: Root directory
+- How: Right-click file → Download
+
+Option 2: Copy Files Manually
+Essential files to copy:
+
+📄 Configuration Files:
+- package.json (dependencies)
+- tsconfig.json (TypeScript config)
+- vite.config.ts (build config)
+- tailwind.config.ts (styling)
+- drizzle.config.ts (database)
+
+📁 Backend (server/):
+- index.ts (server entry)
+- routes.ts (API endpoints)
+- storage.ts (database operations)
+- replitAuth.ts (authentication)
+- db.ts (database connection)
+
+📁 Frontend (client/src/):
+- App.tsx (main app)
+- main.tsx (entry point)
+- pages/dashboard.tsx (main page)
+- pages/landing.tsx (login page)
+- hooks/useAuth.ts (authentication)
+- lib/utils.ts (currency formatting)
+- components/bill-list.tsx (bill management)
+- components/bill-form.tsx (add/edit bills)
+
+📁 Shared:
+- shared/schema.ts (database schema)
+
+Option 3: Git Clone (if available)
+Repository includes all files with proper structure.
+
+After download:
+1. Extract archive or create folder structure
+2. Run: npm install
+3. Set up PostgreSQL in Replit
+4. Run: npm run db:push
+5. Start: npm run dev
+
+The app includes:
+✓ Indian Rupees currency
+✓ Custom categories
+✓ Gmail authentication
+✓ Working quick actions
